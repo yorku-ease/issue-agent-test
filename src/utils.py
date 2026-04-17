@@ -1,3 +1,4 @@
+import re
 import time
 import functools
 
@@ -9,7 +10,7 @@ def retry(times=3, delay=1):
             for attempt in range(times):
                 try:
                     return fn(*args, **kwargs)
-                except Exception as e:
+                except Exception:
                     if attempt == times - 1:
                         raise
                     time.sleep(delay)
@@ -29,4 +30,7 @@ def paginate(items: list, page: int, per_page: int = 10) -> dict:
 
 
 def sanitize_string(value: str) -> str:
-    return value.strip()
+    value = value.strip()
+    value = re.sub(r"[\x00-\x1f\x7f]", "", value)
+    value = re.sub(r" +", " ", value)
+    return value
