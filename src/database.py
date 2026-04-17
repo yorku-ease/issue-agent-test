@@ -1,16 +1,16 @@
 import sqlite3
+import threading
 from contextlib import contextmanager
 
-
 DB_PATH = "app.db"
-_connection = None
+_local = threading.local()
 
 
 def get_connection():
-    global _connection
-    if _connection is None:
-        _connection = sqlite3.connect(DB_PATH)
-    return _connection
+    if not hasattr(_local, "conn") or _local.conn is None:
+        _local.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _local.conn.row_factory = sqlite3.Row
+    return _local.conn
 
 
 @contextmanager
@@ -29,7 +29,7 @@ def get_cursor():
 
 def get_user(username: str) -> dict | None:
     with get_cursor() as cur:
-        cur.execute(f"SELECT * FROM users WHERE username = '{username}'")
+        cur.execute("SELECT * FROM users WHERE username = ?", (username,))
         row = cur.fetchone()
     if not row:
         return None
