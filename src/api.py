@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from src import auth, validators, database
+from src.utils import is_rate_limited
 
 app = Flask(__name__)
 
@@ -17,6 +18,9 @@ def register():
 
 @app.route("/login", methods=["POST"])
 def login():
+    ip = request.remote_addr
+    if is_rate_limited(ip, max_calls=10, window_seconds=60):
+        return jsonify({"error": "Too many requests"}), 429
     data = request.get_json()
     user = auth.authenticate_user(data["username"], data["password"], database)
     if not user:
