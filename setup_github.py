@@ -33,11 +33,16 @@ def api(method, path, **kwargs):
 
 
 def run(cmd, cwd=None):
-    result = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd, shell=True, cwd=cwd,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
     if result.returncode != 0:
-        print(f"  CMD ERROR: {cmd}\n  {result.stderr}")
-        raise RuntimeError(result.stderr)
-    return result.stdout.strip()
+        print(f"  CMD ERROR: {cmd}\n  {stderr}")
+        raise RuntimeError(stderr)
+    return stdout.strip()
 
 
 # ── 1. Get authenticated user ──────────────────────────────────────────────
@@ -46,8 +51,8 @@ user = api("get", "/user")
 OWNER = user["login"]
 print(f"  Logged in as: {OWNER}")
 
-# ── 2. Create GitHub repo ──────────────────────────────────────────────────
-print(f"\nCreating repo {OWNER}/{REPO}...")
+# ── 2. Get or create GitHub repo ──────────────────────────────────────────
+print(f"\nChecking repo {OWNER}/{REPO}...")
 try:
     repo_data = api("post", "/user/repos", json={
         "name": REPO,
@@ -57,23 +62,26 @@ try:
     })
     print(f"  Created: {repo_data['html_url']}")
 except Exception:
-    print("  Repo may already exist, continuing...")
     repo_data = api("get", f"/repos/{OWNER}/{REPO}")
+    print(f"  Already exists: {repo_data['html_url']}")
 
 REPO_URL = f"https://{TOKEN}@github.com/{OWNER}/{REPO}.git"
-
-# ── 3. Push initial commit to GitHub ──────────────────────────────────────
-print("\nPushing initial commit...")
 cwd = os.path.dirname(os.path.abspath(__file__))
+
+# ── 3. Push initial commit (skip if already pushed) ───────────────────────
+print("\nChecking remote...")
 try:
     run(f'git remote add origin "{REPO_URL}"', cwd=cwd)
 except Exception:
     run(f'git remote set-url origin "{REPO_URL}"', cwd=cwd)
 run("git branch -M main", cwd=cwd)
-run("git push -u origin main", cwd=cwd)
-print("  Pushed main branch.")
+try:
+    run("git push -u origin main", cwd=cwd)
+    print("  Pushed main branch.")
+except Exception:
+    print("  Main already pushed, skipping.")
 
-# ── 4. Create 10 issues ────────────────────────────────────────────────────
+# ── 4. Fetch existing issues or create new ones ───────────────────────────
 ISSUES = [
     {
         "title": "Bug: auth.py crashes when password is empty string",
@@ -199,13 +207,21 @@ ISSUES = [
     },
 ]
 
-print("\nCreating 10 issues...")
+print("\nFetching or creating 10 issues...")
+existing = api("get", f"/repos/{OWNER}/{REPO}/issues", params={"state": "open", "per_page": 50})
+existing_titles = {i["title"]: i["number"] for i in existing}
 issue_numbers = []
-for i, issue in enumerate(ISSUES, 1):
-    result = api("post", f"/repos/{OWNER}/{REPO}/issues", json=issue)
-    issue_numbers.append(result["number"])
-    print(f"  Issue #{result['number']}: {issue['title'][:60]}")
-    time.sleep(0.5)
+for issue in ISSUES:
+    if issue["title"] in existing_titles:
+        num = existing_titles[issue["title"]]
+        print(f"  Issue #{num} already exists: {issue['title'][:55]}")
+        issue_numbers.append(num)
+    else:
+        result = api("post", f"/repos/{OWNER}/{REPO}/issues", json=issue)
+        issue_numbers.append(result["number"])
+        print(f"  Created Issue #{result['number']}: {issue['title'][:55]}")
+        time.sleep(0.5)
+issue_numbers.sort()
 
 # ── 5. Branch definitions: file patches per PR ───────────────────────────
 def patch_file(cwd, filepath, content):
@@ -1079,13 +1095,26 @@ print("\nCreating branches, PRs, and merging...")
 cwd = os.path.dirname(os.path.abspath(__file__))
 pr_numbers = []
 
+# fetch existing PRs to skip already-created ones
+existing_prs = api("get", f"/repos/{OWNER}/{REPO}/pulls", params={"state": "all", "per_page": 50})
+existing_pr_titles = {p["title"]: p["number"] for p in existing_prs}
+
 for i, branch_def in enumerate(BRANCHES):
     branch = branch_def["branch"]
     print(f"\n  [{i+1}/10] Branch: {branch}")
 
+    if branch_def["title"] in existing_pr_titles:
+        pr_num = existing_pr_titles[branch_def["title"]]
+        print(f"    PR #{pr_num} already exists, skipping.")
+        pr_numbers.append(pr_num)
+        continue
+
     # create branch from main
-    run(f"git checkout main", cwd=cwd)
-    run(f"git checkout -b {branch}", cwd=cwd)
+    run("git checkout main", cwd=cwd)
+    try:
+        run(f"git checkout -b {branch}", cwd=cwd)
+    except Exception:
+        run(f"git checkout {branch}", cwd=cwd)
 
     # write file changes
     for filepath, content in branch_def["files"].items():
@@ -1093,7 +1122,11 @@ for i, branch_def in enumerate(BRANCHES):
 
     # commit
     run("git add -A", cwd=cwd)
-    run(f'git commit -m "{branch_def["commit_msg"]}"', cwd=cwd)
+    # write commit message to a temp file to avoid shell escaping issues
+    msg_file = os.path.join(cwd, ".git", "COMMIT_MSG_TMP")
+    with open(msg_file, "w", encoding="utf-8") as f:
+        f.write(branch_def["commit_msg"])
+    run(f'git commit -F "{msg_file}"', cwd=cwd)
     run(f"git push origin {branch}", cwd=cwd)
 
     # create PR
