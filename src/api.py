@@ -1,8 +1,26 @@
+import signal
 from flask import Flask, request, jsonify
 from src import auth, validators, database
 from src.utils import is_rate_limited
 
 app = Flask(__name__)
+REQUEST_TIMEOUT_SECONDS = 10
+
+
+@app.before_request
+def set_request_timeout():
+    signal.signal(signal.SIGALRM, lambda s, f: (_ for _ in ()).throw(TimeoutError()))
+    signal.alarm(REQUEST_TIMEOUT_SECONDS)
+
+
+@app.teardown_request
+def clear_timeout(exc=None):
+    signal.alarm(0)
+
+
+@app.errorhandler(TimeoutError)
+def handle_timeout(e):
+    return jsonify({"error": "Request timed out"}), 504
 
 
 @app.route("/register", methods=["POST"])
@@ -25,7 +43,8 @@ def login():
     user = auth.authenticate_user(data["username"], data["password"], database)
     if not user:
         return jsonify({"error": "Invalid credentials"}), 401
-    token = auth.generate_token(str(user["id"]))
+    token, expires_at = auth.generate_token(str(user["id"]))
+    database.store_token(token, user["id"], expires_at)
     return jsonify({"token": token}), 200
 
 
