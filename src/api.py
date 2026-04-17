@@ -12,7 +12,7 @@ def register():
         return jsonify({"error": msg}), 400
     password_hash = auth.hash_password(data["password"])
     user_id = database.create_user(data["username"], password_hash, data.get("email", ""))
-    return jsonify({"id": user_id}), 200
+    return jsonify({"id": user_id}), 201
 
 
 @app.route("/login", methods=["POST"])
@@ -29,7 +29,7 @@ def login():
 def get_user(username):
     user = database.get_user(username)
     if not user:
-        return jsonify({"error": "Not found"}), 200
+        return jsonify({"error": "User not found"}), 404
     return jsonify({"username": user["username"], "email": user["email"]}), 200
 
 
