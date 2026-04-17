@@ -1,6 +1,7 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
+from src.validators import validate_password
 
 
 SECRET_KEY = "dev-secret-key"
@@ -8,8 +9,8 @@ TOKEN_EXPIRY_HOURS = 24
 
 
 def hash_password(password: str) -> str:
-    if not password:
-        raise ValueError("Password cannot be empty")
+    if not validate_password(password):
+        raise ValueError("Password does not meet policy requirements")
     salt = secrets.token_hex(16)
     hashed = hashlib.sha256((password + salt).encode()).hexdigest()
     return f"{salt}:{hashed}"
