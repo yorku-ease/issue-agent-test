@@ -8,17 +8,23 @@ TOKEN_EXPIRY_HOURS = 24
 
 
 def hash_password(password: str) -> str:
+    if not password:
+        raise ValueError("Password cannot be empty")
     salt = secrets.token_hex(16)
     hashed = hashlib.sha256((password + salt).encode()).hexdigest()
     return f"{salt}:{hashed}"
 
 
 def verify_password(password: str, stored: str) -> bool:
-    salt, hashed = stored.split(":")
+    if not password or ":" not in stored:
+        return False
+    salt, hashed = stored.split(":", 1)
     return hashlib.sha256((password + salt).encode()).hexdigest() == hashed
 
 
 def authenticate_user(username: str, password: str, db) -> dict | None:
+    if not username or not password:
+        return None
     user = db.get_user(username)
     if not user:
         return None
@@ -33,5 +39,4 @@ def generate_token(user_id: str) -> str:
 
 
 def validate_token(token: str) -> bool:
-    # TODO: add expiry check
     return len(token) == 64
