@@ -1,6 +1,7 @@
 import re
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+MIN_PASSWORD_LENGTH = 8
 
 
 def validate_username(username: str) -> bool:
@@ -10,7 +11,7 @@ def validate_username(username: str) -> bool:
 
 
 def validate_password(password: str) -> bool:
-    if not password or len(password) < 8:
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
         return False
     return True
 
@@ -25,7 +26,7 @@ def validate_user_payload(payload: dict) -> tuple[bool, str]:
     if not validate_username(payload.get("username", "")):
         return False, "Invalid username"
     if not validate_password(payload.get("password", "")):
-        return False, "Password must be at least 8 characters"
+        return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
     if payload.get("email") and not validate_email(payload["email"]):
         return False, "Invalid email format"
     return True, ""
