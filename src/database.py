@@ -1,6 +1,7 @@
 import sqlite3
 import threading
 from contextlib import contextmanager
+from datetime import datetime
 
 DB_PATH = "app.db"
 _local = threading.local()
@@ -45,6 +46,23 @@ def create_user(username: str, password_hash: str, email: str) -> int:
         return cur.lastrowid
 
 
+def store_token(token: str, user_id: int, expires_at: datetime) -> None:
+    with get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+            (token, user_id, expires_at.isoformat()),
+        )
+
+
+def get_token(token: str) -> dict | None:
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM tokens WHERE token = ?", (token,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {"token": row[0], "user_id": row[1], "expires_at": row[2]}
+
+
 def init_db():
     with get_cursor() as cur:
         cur.execute(
@@ -53,5 +71,12 @@ def init_db():
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 email TEXT
+            )"""
+        )
+        cur.execute(
+            """CREATE TABLE IF NOT EXISTS tokens (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                expires_at TEXT NOT NULL
             )"""
         )
