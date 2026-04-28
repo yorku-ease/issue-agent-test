@@ -1,6 +1,9 @@
 import re
 import time
 import functools
+from collections import defaultdict
+
+_rate_limit_store: dict = defaultdict(list)
 
 
 def retry(times=3, delay=1):
@@ -34,3 +37,13 @@ def sanitize_string(value: str) -> str:
     value = re.sub(r"[\x00-\x1f\x7f]", "", value)
     value = re.sub(r" +", " ", value)
     return value
+
+
+def is_rate_limited(key: str, max_calls: int = 10, window_seconds: int = 60) -> bool:
+    now = time.time()
+    timestamps = _rate_limit_store[key]
+    _rate_limit_store[key] = [t for t in timestamps if now - t < window_seconds]
+    if len(_rate_limit_store[key]) >= max_calls:
+        return True
+    _rate_limit_store[key].append(now)
+    return False
