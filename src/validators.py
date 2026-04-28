@@ -2,12 +2,13 @@ import re
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 MIN_PASSWORD_LENGTH = 8
+SAFE_USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
 
 
 def validate_username(username: str) -> bool:
-    if not username or len(username) < 3:
+    if not username:
         return False
-    return bool(re.match(r"^[a-zA-Z0-9_]+$", username))
+    return bool(SAFE_USERNAME_RE.match(username))
 
 
 def validate_password(password: str) -> bool:
