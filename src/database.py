@@ -4,13 +4,19 @@ from contextlib import contextmanager
 from datetime import datetime
 
 DB_PATH = "app.db"
+DB_TIMEOUT_SECONDS = 5
 _local = threading.local()
 
 
 def get_connection():
     if not hasattr(_local, "conn") or _local.conn is None:
-        _local.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _local.conn = sqlite3.connect(
+            DB_PATH,
+            check_same_thread=False,
+            timeout=DB_TIMEOUT_SECONDS,
+        )
         _local.conn.row_factory = sqlite3.Row
+        _local.conn.execute("PRAGMA busy_timeout = 5000")
     return _local.conn
 
 
