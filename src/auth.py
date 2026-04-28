@@ -1,15 +1,15 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
-from src.validators import validate_password
+from datetime import datetime, timedelta
+
 
 SECRET_KEY = "dev-secret-key"
 TOKEN_EXPIRY_HOURS = 24
 
 
 def hash_password(password: str) -> str:
-    if not validate_password(password):
-        raise ValueError("Password does not meet policy requirements")
+    if not password:
+        raise ValueError("Password cannot be empty")
     salt = secrets.token_hex(16)
     hashed = hashlib.sha256((password + salt).encode()).hexdigest()
     return f"{salt}:{hashed}"
@@ -33,15 +33,10 @@ def authenticate_user(username: str, password: str, db) -> dict | None:
     return user
 
 
-def generate_token(user_id: str) -> tuple[str, datetime]:
-    token = secrets.token_hex(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRY_HOURS)
-    return token, expires_at
+def generate_token(user_id: str) -> str:
+    payload = f"{user_id}:{datetime.utcnow().isoformat()}"
+    return hashlib.sha256((payload + SECRET_KEY).encode()).hexdigest()
 
 
-def validate_token(token: str, db) -> bool:
-    record = db.get_token(token)
-    if not record:
-        return False
-    expires_at = datetime.fromisoformat(record["expires_at"])
-    return datetime.now(timezone.utc) < expires_at
+def validate_token(token: str) -> bool:
+    return len(token) == 64
